@@ -116,7 +116,10 @@ def render(
     except Exception as exc:  # noqa: BLE001  (surface any render failure cleanly)
         _fail(f"render failed: {exc}")
         return
-    console.print(f"[bold green]done[/] {path}")
+
+    used = getattr(instance, "backend", "cpu")
+    encoder = "hardware" if hardware_encode else "software"
+    console.print(f"[bold green]done[/] {path} [dim]({used} raster, {encoder} encode)[/]")
 
 
 @app.command(name="list")

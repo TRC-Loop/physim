@@ -7,6 +7,7 @@ many objects the scene holds.
 
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 
 import av
@@ -63,29 +64,6 @@ class VideoWriter:
             self.container.mux(packet)
         self.frames_written += 1
 
-    def add_audio(self, samples: np.ndarray, sample_rate: int, codec: str, bitrate: int) -> None:
-        """Mux a finished audio track into the container.
-
-        ``samples`` is float32 shaped ``(channels, n)`` in the range -1 to 1.
-        """
-        channels = samples.shape[0]
-        layout = "stereo" if channels == 2 else "mono"
-        stream = self.container.add_stream(codec, rate=sample_rate)
-        stream.bit_rate = bitrate
-
-        pcm = np.clip(samples, -1.0, 1.0)
-        pcm = (pcm * 32767.0).astype(np.int16)
-        frame = av.AudioFrame.from_ndarray(
-            pcm.reshape(1, -1) if channels == 1 else pcm.T.reshape(1, -1).copy(),
-            format="s16",
-            layout=layout,
-        )
-        frame.sample_rate = sample_rate
-        for packet in stream.encode(frame):
-            self.container.mux(packet)
-        for packet in stream.encode(None):
-            self.container.mux(packet)
-
     def close(self) -> None:
         """Flush the encoder and finalize the file."""
         for packet in self.stream.encode(None):
@@ -97,3 +75,63 @@ class VideoWriter:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+def encode_audio_stream(container, stream, samples: np.ndarray, sample_rate: int) -> None:
+    """Encode a float32 ``(channels, n)`` track into an open container.
+
+    The track is split into encoder-sized frames with explicit timestamps;
+    handing an encoder one huge frame produces packets it cannot timestamp.
+    """
+    channels = samples.shape[0]
+    layout = "stereo" if channels == 2 else "mono"
+    pcm = np.clip(samples, -1.0, 1.0).astype(np.float32)
+
+    resampler = av.AudioResampler(format=stream.format.name, layout=layout, rate=sample_rate)
+    frame_size = stream.frame_size or 1024
+    time_base = Fraction(1, sample_rate)
+    pts = 0
+
+    for start in range(0, pcm.shape[1], frame_size):
+        chunk = np.ascontiguousarray(pcm[:, start : start + frame_size])
+        frame = av.AudioFrame.from_ndarray(chunk, format="fltp", layout=layout)
+        frame.sample_rate = sample_rate
+        frame.time_base = time_base
+        frame.pts = pts
+        pts += chunk.shape[1]
+        for resampled in resampler.resample(frame):
+            for packet in stream.encode(resampled):
+                container.mux(packet)
+
+    for resampled in resampler.resample(None):
+        for packet in stream.encode(resampled):
+            container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+
+
+def mux_audio(path: Path, samples: np.ndarray, config) -> Path:
+    """Add an audio track to an already written video file.
+
+    Done as a second pass because a container's header is written on the first
+    muxed packet, and a stream added after that has no usable time base. The
+    video is copied through without re-encoding, so this is cheap.
+    """
+    temp = path.with_name(f"{path.stem}.muxing{path.suffix}")
+    with av.open(str(path)) as source, av.open(str(temp), mode="w") as target:
+        video_in = source.streams.video[0]
+        video_out = target.add_stream_from_template(video_in)
+
+        audio = target.add_stream(config.codec, rate=config.sample_rate)
+        audio.bit_rate = config.bitrate
+
+        for packet in source.demux(video_in):
+            if packet.dts is None:
+                continue
+            packet.stream = video_out
+            target.mux(packet)
+
+        encode_audio_stream(target, audio, samples, config.sample_rate)
+
+    temp.replace(path)
+    return path

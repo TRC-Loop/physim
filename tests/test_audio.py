@@ -155,6 +155,41 @@ def test_render_muxes_an_audio_stream(tmp_path):
         assert len(container.streams.audio) == 1
 
 
+def test_long_audio_muxes_without_rebase_error(tmp_path):
+    # a single oversized audio frame produced packets av could not timestamp,
+    # which only showed up once a track ran for many seconds
+    import av
+
+    from physim.export.video import mux_audio
+
+    scene = Scene(RenderConfig(resolution=(96, 96), fps=60), physics=PhysicsParams(gravity=0))
+    scene.add(Circle(radius=8))
+    scene.run(seconds=0.5)
+    path = scene.render(output=tmp_path / "long.mp4", quiet=True)
+
+    samples = np.zeros((2, 48_000 * 30), dtype=np.float32)
+    mux_audio(path, samples, AudioConfig())
+
+    with av.open(str(path)) as container:
+        assert len(container.streams.audio) == 1
+        assert len(container.streams.video) == 1
+
+
+def test_muxed_audio_keeps_every_video_frame(tmp_path):
+    import av
+
+    from physim.export.video import mux_audio
+
+    scene = Scene(RenderConfig(resolution=(96, 96), fps=30), physics=PhysicsParams(gravity=0))
+    scene.add(Circle(radius=8, velocity=(40, 0)))
+    scene.run(seconds=1.0)
+    path = scene.render(output=tmp_path / "keep.mp4", quiet=True)
+
+    mux_audio(path, np.zeros((2, 48_000), dtype=np.float32), AudioConfig())
+    with av.open(str(path)) as container:
+        assert len(list(container.decode(video=0))) == 30
+
+
 def test_audio_can_be_disabled(tmp_path):
     import av
 

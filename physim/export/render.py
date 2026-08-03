@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..config import RenderConfig
 from ..render import Renderer
-from .video import VideoWriter
+from .video import VideoWriter, mux_audio
 
 
 def _progress(total: int | None, quiet: bool):
@@ -58,15 +58,19 @@ def render_scene(
             scene.stats.end_frame()
             bar()
 
-        # sounds are queued while frames render, so the track is built last
-        audio = _audio_track(scene)
-        if audio is not None:
-            cfg = scene.audio_config
-            writer.add_audio(audio, cfg.sample_rate, cfg.codec, cfg.bitrate)
-            if cfg.export_separate is not None:
-                from ..audio import write_audio_file
+    # sounds are queued while frames render, so the track is built once the
+    # video file is closed, then muxed in as a second pass
+    audio = _audio_track(scene)
+    if audio is not None:
+        cfg = scene.audio_config
+        mux_audio(path, audio, cfg)
+        if cfg.export_separate is not None:
+            from ..audio import write_audio_file
 
-                write_audio_file(Path(cfg.export_separate), audio, cfg)
+            write_audio_file(Path(cfg.export_separate), audio, cfg)
+
+    scene.backend = renderer.backend
+    """Which raster backend the last render actually used."""
 
     if scene.debug.enabled and scene.debug.print_summary and not quiet:
         print_summary(scene, path, renderer.backend)
