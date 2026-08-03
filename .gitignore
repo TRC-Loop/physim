@@ -180,6 +180,11 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# rendered output
+out/
+*.mp4
+*.mkv
+
 # macOS
 .DS_Store
 .AppleDouble

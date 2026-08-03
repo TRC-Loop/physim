@@ -1,0 +1,30 @@
+[project]
+name = "physim-presets"
+version = "0.0.0"
+description = "Color palettes and physics presets for physim"
+authors = [
+    { name = "Arne K.", email = "me@arne.sh" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+keywords = ["physim", "presets", "palettes", "physics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/TRC-Loop/physim"
+Repository = "https://github.com/TRC-Loop/physim"
+Issues = "https://github.com/TRC-Loop/physim/issues"
+
+[tool.poetry]
+packages = [{ include = "physim_presets" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

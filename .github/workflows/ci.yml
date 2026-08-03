@@ -6,16 +6,38 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --all-extras --no-interaction
+
+      - name: Lint
+        run: poetry run ruff check .
+
+      - name: Check formatting
+        run: poetry run ruff format --check .
+
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -23,10 +45,16 @@ jobs:
         run: pipx install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --all-extras --no-interaction
 
       - name: Run tests
-        run: poetry run pytest
+        run: poetry run pytest --cov --cov-report=term-missing
 
-      - name: Build package
-        run: poetry build
+      - name: Render an example end to end
+        run: poetry run python -m physim_examples.bouncing_ball --seconds 1 -o /tmp/ci.mp4
+
+      - name: Build packages
+        run: |
+          poetry build
+          cd packages/physim-presets && poetry build
+          cd ../physim-examples && poetry build

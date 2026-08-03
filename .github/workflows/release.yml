@@ -7,13 +7,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -43,6 +46,61 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+  # sibling packages version independently, so they only publish when their own
+  # version is not already on pypi
+  siblings:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [physim-presets, physim-examples]
     permissions:
       contents: write
       id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Check whether this version is already published
+        id: check
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          VERSION="$(poetry version -s)"
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://pypi.org/pypi/${{ matrix.package }}/$VERSION/json")"
+          if [ "$CODE" = "200" ]; then
+            echo "already published, skipping"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build wheel + sdist
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/${{ matrix.package }}
+        run: poetry build
+
+      - name: Upload build artifacts to GitHub Release
+        if: steps.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            packages/${{ matrix.package }}/dist/* --clobber
+
+      - name: Publish to PyPI
+        if: steps.check.outputs.publish == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/${{ matrix.package }}/dist/

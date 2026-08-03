@@ -1,0 +1,129 @@
+"""Driving a scene through the renderer and into a file."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+from ..config import RenderConfig
+from ..render import Renderer
+from .video import VideoWriter
+
+
+def _progress(total: int | None, quiet: bool):
+    """Return an alive-progress bar, or a no-op context when quiet."""
+    if quiet:
+        from contextlib import nullcontext
+
+        return nullcontext(lambda *_: None)
+    from alive_progress import alive_bar
+
+    return alive_bar(total, title="rendering", enrich_print=False)
+
+
+def render_scene(
+    scene,
+    *,
+    output: Path | str | None = None,
+    quiet: bool = False,
+    **overrides,
+) -> Path:
+    """Render a scene to a video file and return the path it wrote.
+
+    Keyword overrides are applied to the scene's :class:`RenderConfig` first,
+    so ``scene.render(fps=60, format="mkv")`` works without building a config.
+    """
+    config = _apply_overrides(scene.config, overrides)
+    scene.config = config
+    scene.build()
+
+    path = Path(output) if output else config.output_path(type(scene).__name__)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    renderer = Renderer(config, scene.debug)
+    scene.stats.total_frames = scene.total_frames
+
+    with VideoWriter(path, config) as writer, _progress(scene.total_frames, quiet) as bar:
+        for _ in scene.frames():
+            scene.stats.begin_frame()
+
+            started = time.perf_counter()
+            frame = renderer.render(scene)
+            scene.stats.render_time = time.perf_counter() - started
+
+            started = time.perf_counter()
+            writer.write(frame)
+            scene.stats.encode_time = time.perf_counter() - started
+
+            scene.stats.end_frame()
+            bar()
+
+        # sounds are queued while frames render, so the track is built last
+        audio = _audio_track(scene)
+        if audio is not None:
+            cfg = scene.audio_config
+            writer.add_audio(audio, cfg.sample_rate, cfg.codec, cfg.bitrate)
+            if cfg.export_separate is not None:
+                from ..audio import write_audio_file
+
+                write_audio_file(Path(cfg.export_separate), audio, cfg)
+
+    if scene.debug.enabled and scene.debug.print_summary and not quiet:
+        print_summary(scene, path, renderer.backend)
+    return path
+
+
+def _apply_overrides(config: RenderConfig, overrides: dict) -> RenderConfig:
+    """Return a config with the given fields replaced."""
+    if not overrides:
+        return config
+    from dataclasses import replace
+
+    clean = {k: v for k, v in overrides.items() if v is not None}
+    return replace(config, **clean) if clean else config
+
+
+def _audio_track(scene):
+    """Build the scene's audio track, or ``None`` when there is no sound."""
+    if not scene.audio_config.enabled or not scene._sounds:
+        return None
+    from ..audio import mix
+
+    return mix(scene._sounds, scene.audio_config, scene.time or 1.0)
+
+
+def print_summary(scene, path: Path, backend: str) -> None:
+    """Print a debug summary once a render finishes.
+
+    Uses rich when it's installed, and falls back to plain text otherwise so
+    core installs don't need it.
+    """
+    stats = scene.stats
+    rows = [
+        ("output", str(path)),
+        ("resolution", str(scene.config.resolution)),
+        ("fps", str(scene.config.fps)),
+        ("backend", backend),
+        ("frames", str(stats.frame_index)),
+        ("objects", str(stats.object_count)),
+        ("collisions", str(stats.total_collisions)),
+        ("events", str(stats.events_fired)),
+        ("avg fps", f"{stats.average_fps:.1f}"),
+        ("avg frametime", f"{stats.frametime_ms:.2f} ms"),
+        ("elapsed", f"{stats.elapsed:.2f} s"),
+    ]
+    try:
+        from rich.console import Console
+        from rich.table import Table
+    except ImportError:
+        print(f"\nphysim · {type(scene).__name__}")
+        for label, value in rows:
+            print(f"  {label:<14} {value}")
+        return
+
+    table = Table(title=f"physim · {type(scene).__name__}", title_style="bold")
+    table.add_column("stat", style="cyan")
+    table.add_column("value", justify="right")
+    for label, value in rows:
+        table.add_row(label, value)
+    Console().print(table)
