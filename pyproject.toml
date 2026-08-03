@@ -1,0 +1,38 @@
+[project]
+name = "physim"
+version = "0.1.0"
+description = "Python library to create mp4 animated visualizations (like those social media ball videos)"
+authors = [
+    { name = "Arne K.", email = "me@arne.sh" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["physics", "simulation", "animation", "mp4", "video", "visualization"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/TRC-Loop/physim"
+Repository = "https://github.com/TRC-Loop/physim"
+Issues = "https://github.com/TRC-Loop/physim/issues"
+
+[tool.poetry]
+packages = [{ include = "physim" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
