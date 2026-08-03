@@ -8,7 +8,7 @@ more here than physical accuracy.
 
 from __future__ import annotations
 
-from math import sqrt
+from math import ceil, sqrt
 
 from ..events import BOUNCE, COLLISION, ESCAPE
 from ..types import Vec2
@@ -26,14 +26,46 @@ class Engine:
         self.collisions_this_step = 0
         """Contacts resolved during the most recent :meth:`step`."""
 
+        self.substeps_used = self.params.substeps
+        """How many substeps the most recent :meth:`step` actually ran."""
+
     def step(self, bodies: list, boundaries: list, dt: float) -> None:
         """Advance every body by ``dt`` seconds, sub-stepping for stability."""
         self.collisions_this_step = 0
         if dt <= 0.0:
             return
-        sub_dt = dt / self.params.substeps
-        for _ in range(self.params.substeps):
+        substeps = self._substeps_for(bodies, dt)
+        self.substeps_used = substeps
+        sub_dt = dt / substeps
+        for _ in range(substeps):
             self._substep(bodies, boundaries, sub_dt)
+
+    def _substeps_for(self, bodies: list, dt: float) -> int:
+        """How many substeps this frame actually needs.
+
+        Enough that the fastest body moves at most half the smallest radius per
+        substep, which is the point at which tunnelling becomes possible.
+        """
+        limit = self.params.substeps
+        if not self.params.adaptive_substeps or not bodies:
+            return limit
+
+        fastest_sq = 0.0
+        smallest = float("inf")
+        for body in bodies:
+            velocity = body.velocity
+            speed_sq = velocity.x * velocity.x + velocity.y * velocity.y
+            if speed_sq > fastest_sq:
+                fastest_sq = speed_sq
+            radius = body.collision_radius
+            if 0.0 < radius < smallest:
+                smallest = radius
+
+        if fastest_sq <= 0.0 or smallest == float("inf"):
+            return 1
+        travel = sqrt(fastest_sq) * dt
+        needed = ceil(travel / (smallest * 0.5))
+        return max(1, min(limit, needed))
 
     def _substep(self, bodies: list, boundaries: list, dt: float) -> None:
         """Run a single integration and collision pass."""

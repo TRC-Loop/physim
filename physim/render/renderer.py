@@ -52,6 +52,26 @@ class Renderer:
 
     def render(self, scene) -> np.ndarray:
         """Draw a scene and return the frame as an RGB uint8 array."""
+        blurred = self._draw_frame(scene)
+        return blurred if blurred is not None else self.to_array()
+
+    def render_rgba(self, scene) -> np.ndarray:
+        """Draw a scene and return a contiguous RGBA frame.
+
+        This is the fast path to the encoder. The RGB form is a non-contiguous
+        view of this buffer, so producing it costs two full-frame strided
+        copies that the encoder would only undo again.
+        """
+        blurred = self._draw_frame(scene)
+        return blurred if blurred is not None else self.to_rgba()
+
+    def _draw_frame(self, scene) -> np.ndarray | None:
+        """Draw one frame onto the surface.
+
+        Returns a finished RGB array only when motion blur produced one,
+        otherwise ``None`` and the caller reads the surface in the form it
+        wants.
+        """
         self.time = scene.time
         canvas = self.surface.getCanvas()
         self._draw_background(canvas)
@@ -63,7 +83,7 @@ class Renderer:
         self._draw_objects(canvas, scene)
         if self.debug.enabled and self.debug.overlay:
             self.draw_debug_overlay(canvas, scene)
-        return self.to_array()
+        return None
 
     def _render_motion_blurred(self, scene, samples: int) -> np.ndarray:
         """Average several sub-frame samples to smear fast motion.
@@ -122,9 +142,18 @@ class Renderer:
                 obj.render(canvas, self)
 
     def to_array(self) -> np.ndarray:
-        """Snapshot the surface as an RGB uint8 array."""
+        """Snapshot the surface as an RGB uint8 array.
+
+        Note this is a view into a 4-channel buffer, so it is not contiguous.
+        Use :meth:`to_rgba` when the result is going straight to an encoder.
+        """
         image = self.surface.makeImageSnapshot()
         return image.toarray(colorType=skia.kRGB_888x_ColorType)[:, :, :3]
+
+    def to_rgba(self) -> np.ndarray:
+        """Snapshot the surface as a contiguous RGBA uint8 array."""
+        image = self.surface.makeImageSnapshot()
+        return image.toarray(colorType=skia.kRGBA_8888_ColorType)
 
     def _paint_for(self, obj, center: Vec2, extent: float, stroke: bool = False):
         """Build the fill or stroke paint for an object."""

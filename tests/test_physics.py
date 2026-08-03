@@ -177,6 +177,48 @@ def test_engine_reports_collisions_per_step():
     assert engine.collisions_this_step == 0
 
 
+def test_slow_scenes_use_one_substep():
+    scene = Scene(physics=PhysicsParams(gravity=0, damping=1.0))
+    scene.add(HollowCircle(radius=300, thickness=8))
+    scene.add(Circle(radius=18, velocity=(200, 0)))
+    scene.step(1 / 60)
+    assert scene.engine.substeps_used == 1
+
+
+def test_fast_scenes_use_the_full_substep_budget():
+    scene = Scene(physics=PhysicsParams(gravity=0, damping=1.0, substeps=4))
+    scene.add(HollowCircle(radius=300, thickness=8))
+    scene.add(Circle(radius=18, velocity=(20_000, 0)))
+    scene.step(1 / 60)
+    assert scene.engine.substeps_used == 4
+
+
+def test_adaptive_substeps_still_contain_a_fast_ball():
+    scene = Scene(physics=PhysicsParams(gravity=0, damping=1.0))
+    scene.add(HollowCircle(radius=300, thickness=8))
+    ball = Circle(radius=18, velocity=(20_000, 0))
+    scene.add(ball)
+    for _ in range(120):
+        scene.step(1 / 60)
+    assert ball.pos.length <= 300
+
+
+def test_adaptive_substeps_can_be_disabled():
+    params = PhysicsParams(gravity=0, damping=1.0, substeps=4, adaptive_substeps=False)
+    scene = Scene(physics=params)
+    scene.add(Circle(radius=18, velocity=(1, 0)))
+    scene.step(1 / 60)
+    assert scene.engine.substeps_used == 4
+
+
+def test_substeps_never_exceed_the_limit():
+    scene = Scene(physics=PhysicsParams(gravity=0, damping=1.0, substeps=2))
+    scene.add(HollowCircle(radius=300, thickness=8))
+    scene.add(Circle(radius=5, velocity=(500_000, 0)))
+    scene.step(1 / 60)
+    assert scene.engine.substeps_used == 2
+
+
 def test_attraction_pulls_toward_the_center():
     params = PhysicsParams(gravity=0, damping=1.0, attraction=500_000)
     scene = Scene(physics=params)

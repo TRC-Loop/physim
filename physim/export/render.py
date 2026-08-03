@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from ..config import RenderConfig
@@ -11,7 +12,11 @@ from .video import VideoWriter, mux_audio
 
 
 def _progress(total: int | None, quiet: bool):
-    """Return an alive-progress bar, or a no-op context when quiet."""
+    """Return an alive-progress bar, or a no-op context when quiet.
+
+    ``total`` is left unset for runs that can stop early, otherwise finishing
+    before the last frame makes the bar report an incomplete run.
+    """
     if quiet:
         from contextlib import nullcontext
 
@@ -19,6 +24,35 @@ def _progress(total: int | None, quiet: bool):
     from alive_progress import alive_bar
 
     return alive_bar(total, title="rendering", enrich_print=False)
+
+
+@contextmanager
+def _step(message: str, quiet: bool):
+    """Show a spinner for a step that would otherwise look like a hang.
+
+    Each step ticks itself off on the way out, so successive steps stack as
+    lines instead of overwriting one another.
+    """
+    if quiet:
+        yield
+        return
+    from yaspin import yaspin
+
+    spinner = yaspin(text=message, color="cyan")
+    spinner.start()
+    try:
+        yield
+    except Exception:
+        spinner.fail("✗")
+        raise
+    else:
+        spinner.ok("✓")
+
+
+def _log(message: str, quiet: bool) -> None:
+    """Print a progress line unless the render is quiet."""
+    if not quiet:
+        print(message)
 
 
 def render_scene(
@@ -43,31 +77,54 @@ def render_scene(
     renderer = Renderer(config, scene.debug)
     scene.stats.total_frames = scene.total_frames
 
-    with VideoWriter(path, config) as writer, _progress(scene.total_frames, quiet) as bar:
-        for _ in scene.frames():
-            scene.stats.begin_frame()
+    # a run that can end early would otherwise leave the bar looking failed
+    open_ended = getattr(scene, "may_stop_early", False)
+    bar_total = None if open_ended else scene.total_frames
 
-            started = time.perf_counter()
-            frame = renderer.render(scene)
-            scene.stats.render_time = time.perf_counter() - started
+    writer = VideoWriter(path, config)
+    try:
+        with _progress(bar_total, quiet) as bar:
+            for _ in scene.frames():
+                scene.stats.begin_frame()
 
-            started = time.perf_counter()
-            writer.write(frame)
-            scene.stats.encode_time = time.perf_counter() - started
+                started = time.perf_counter()
+                frame = renderer.render_rgba(scene)
+                scene.stats.render_time = time.perf_counter() - started
 
-            scene.stats.end_frame()
-            bar()
+                started = time.perf_counter()
+                writer.write(frame)
+                scene.stats.encode_time = time.perf_counter() - started
+
+                scene.stats.end_frame()
+                bar()
+    finally:
+        with _step("flushing the encoder", quiet):
+            writer.close()
+
+    frames = scene.stats.frame_index
+    _log(
+        f"  rendered {frames} frames ({frames / config.fps:.1f}s), "
+        f"{scene.stats.total_collisions} collisions, {len(scene.objects)} objects left",
+        quiet,
+    )
 
     # sounds are queued while frames render, so the track is built once the
     # video file is closed, then muxed in as a second pass
-    audio = _audio_track(scene)
-    if audio is not None:
-        cfg = scene.audio_config
-        mux_audio(path, audio, cfg)
-        if cfg.export_separate is not None:
-            from ..audio import write_audio_file
+    cfg = scene.audio_config
+    if cfg.enabled and scene._sounds:
+        with _step(f"building audio track ({len(scene._sounds)} sounds)", quiet):
+            audio = _audio_track(scene)
+        if audio is not None:
+            with _step("muxing audio into the video", quiet):
+                mux_audio(path, audio, cfg)
+            if cfg.export_separate is not None:
+                with _step(f"writing {cfg.export_separate}", quiet):
+                    from ..audio import write_audio_file
 
-            write_audio_file(Path(cfg.export_separate), audio, cfg)
+                    write_audio_file(Path(cfg.export_separate), audio, cfg)
+            _log(f"  audio: {audio.shape[1] / cfg.sample_rate:.1f}s, {cfg.codec}", quiet)
+    elif cfg.enabled:
+        _log("  audio: no sounds were triggered, writing video only", quiet)
 
     scene.backend = renderer.backend
     """Which raster backend the last render actually used."""

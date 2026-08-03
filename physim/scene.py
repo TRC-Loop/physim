@@ -55,6 +55,9 @@ class Scene:
         """Scene time in seconds."""
 
         self.frame = 0
+        self.may_stop_early = False
+        """Whether the run can finish before its planned frame count."""
+
         self._stopping = False
         self._pending: list[SceneObject] = []
         self._frames_target: int | None = None
@@ -203,6 +206,7 @@ class Scene:
         """Set the run length in seconds. The renderer performs the work."""
         self._frames_target = max(1, round(seconds * self.config.fps))
         self._stop_condition: StopCondition | None = None
+        self.may_stop_early = False
         return self
 
     def run_until(
@@ -216,6 +220,7 @@ class Scene:
         that ends the run the first time it fires.
         """
         self._frames_target = max(1, round(max_seconds * self.config.fps))
+        self.may_stop_early = True
         if isinstance(condition, str):
             self.on(condition, lambda _event: self.stop())
             self._stop_condition = None

@@ -207,13 +207,18 @@ def _print_plan(name, scene, config, hardware_encode, physics, seed) -> None:
     """Summarize what is about to be rendered, before any work happens."""
     backend = resolve_backend(config.backend)
     frames = scene.total_frames
-    length = f"{frames / config.fps:.1f}s" if frames else "until stopped"
+    if not frames:
+        length = "until stopped"
+    elif getattr(scene, "may_stop_early", False):
+        length = f"up to {frames / config.fps:.1f}s"
+    else:
+        length = f"{frames / config.fps:.1f}s"
 
     rows = [
         ("scene", name),
         ("output", str(config.output_path(name))),
         ("resolution", f"{config.resolution} @ {config.fps}fps · {config.format}"),
-        ("length", f"{length}" + (f" ({frames} frames)" if frames else "")),
+        ("length", length + (f" ({frames} frames max)" if frames else "")),
         ("raster", backend),
         ("encoder", f"{config.codec} ({'hardware' if hardware_encode else 'software'})"),
         ("physics", physics or "default"),

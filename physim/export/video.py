@@ -58,8 +58,17 @@ class VideoWriter:
         self.stream.bit_rate = config.bitrate
 
     def write(self, frame: np.ndarray) -> None:
-        """Encode one RGB uint8 frame."""
-        video_frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(frame), format="rgb24")
+        """Encode one frame, given as RGB or RGBA uint8.
+
+        RGBA is preferred: it is what the renderer holds natively, so it needs
+        no copy on the way in.
+        """
+        if frame.shape[2] == 4:
+            if not frame.flags["C_CONTIGUOUS"]:
+                frame = np.ascontiguousarray(frame)
+            video_frame = av.VideoFrame.from_ndarray(frame, format="rgba")
+        else:
+            video_frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(frame), format="rgb24")
         for packet in self.stream.encode(video_frame):
             self.container.mux(packet)
         self.frames_written += 1

@@ -20,7 +20,7 @@ class PhysicsParams:
     firm downward gravity with lively but slightly lossy bounces.
     """
 
-    gravity: float = 1200.0
+    gravity: float = 850.0
     """Downward acceleration in pixels per second squared."""
 
     gravity_direction: Vec2 = Vec2(0.0, -1.0)
@@ -54,7 +54,16 @@ class PhysicsParams:
     """Visual deformation applied on impact, from 0 to 1."""
 
     substeps: int = 4
-    """Physics iterations per rendered frame. Higher is more stable and slower."""
+    """Maximum physics iterations per rendered frame. Higher is more stable and slower."""
+
+    adaptive_substeps: bool = True
+    """Use fewer substeps when nothing is moving fast enough to need them.
+
+    Substeps exist so a fast object cannot tunnel through a wall in one jump.
+    When the fastest object travels well under its own radius per frame the
+    extra iterations change nothing, so they are skipped. Set to false for a
+    fixed :attr:`substeps` count.
+    """
 
     ball_collisions: bool = False
     """Whether objects collide with each other as well as with boundaries."""
