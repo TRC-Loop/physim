@@ -31,7 +31,7 @@ Issues = "https://github.com/TRC-Loop/physim/issues"
 packages = [{ include = "physim" }]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
+pytest = "^9.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]
