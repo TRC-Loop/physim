@@ -8,6 +8,8 @@ more here than physical accuracy.
 
 from __future__ import annotations
 
+from math import sqrt
+
 from ..events import BOUNCE, COLLISION, ESCAPE
 from ..types import Vec2
 from .collision import resolve_pair, resolve_wall
@@ -35,38 +37,63 @@ class Engine:
 
     def _substep(self, bodies: list, boundaries: list, dt: float) -> None:
         """Run a single integration and collision pass."""
+        p = self.params
+        # hoist everything constant across the whole pass; at thousands of
+        # bodies these lookups and the vector allocations they imply dominate
+        gravity = p.gravity_vector if p.gravity else None
+        gx = gravity.x * dt if gravity else 0.0
+        gy = gravity.y * dt if gravity else 0.0
+        damping = p.damping**dt if p.damping != 1.0 else 1.0
+        max_speed = p.max_speed
+        min_speed = p.min_speed
+        attraction = p.attraction
+        ax, ay = p.attraction_point.x, p.attraction_point.y
+
         for body in bodies:
-            if not body.fixed:
-                self._integrate(body, dt)
+            if body.fixed:
+                continue
+            velocity = body.velocity
+            vx, vy = velocity.x, velocity.y
+            position = body.transform.position
+            px, py = position.x, position.y
+
+            if gravity is not None and body.gravity_scale:
+                scale = body.gravity_scale
+                vx += gx * scale
+                vy += gy * scale
+
+            if attraction:
+                ox, oy = ax - px, ay - py
+                distance_sq = ox * ox + oy * oy
+                if distance_sq > 1.0:
+                    distance = sqrt(distance_sq)
+                    pull = attraction / distance_sq * dt / distance
+                    vx += ox * pull
+                    vy += oy * pull
+                else:
+                    vx += ox * attraction * dt
+                    vy += oy * attraction * dt
+
+            if damping != 1.0:
+                vx *= damping
+                vy *= damping
+
+            if max_speed is not None or min_speed:
+                speed = sqrt(vx * vx + vy * vy)
+                if max_speed is not None and speed > max_speed and speed > 0.0:
+                    factor = max_speed / speed
+                    vx *= factor
+                    vy *= factor
+                elif min_speed and speed < min_speed:
+                    vx = vy = 0.0
+
+            body.velocity = Vec2(vx, vy)
+            body.transform.position = Vec2(px + vx * dt, py + vy * dt)
+
         for body in bodies:
             self._collide_boundaries(body, boundaries)
-        if self.params.ball_collisions and len(bodies) > 1:
+        if p.ball_collisions and len(bodies) > 1:
             self._collide_bodies(bodies)
-
-    def _integrate(self, body, dt: float) -> None:
-        """Apply accelerations and move a body forward one sub-step."""
-        p = self.params
-        velocity = body.velocity
-
-        if p.gravity and body.gravity_scale:
-            velocity = velocity + p.gravity_vector * (body.gravity_scale * dt)
-
-        if p.attraction:
-            offset = p.attraction_point - body.transform.position
-            distance_sq = max(offset.length_squared, 1.0)
-            pull = offset.normalized() * (p.attraction / distance_sq)
-            velocity = velocity + pull * dt
-
-        if p.damping != 1.0:
-            velocity = velocity * (p.damping**dt)
-
-        if p.max_speed is not None:
-            velocity = velocity.clamped(p.max_speed)
-        if p.min_speed and velocity.length < p.min_speed:
-            velocity = Vec2()
-
-        body.velocity = velocity
-        body.transform.position = body.transform.position + velocity * dt
 
     def _restitution_for(self, body) -> float:
         """Per-object bounciness, falling back to the scene parameters."""

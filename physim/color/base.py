@@ -23,11 +23,17 @@ class Color:
     ``Color("oklch(70% 0.2 20)")``) or via the space-named constructors.
     """
 
-    __slots__ = ("_c",)
+    # _rgba8 caches the gamut-mapped result; converting through coloraide is by
+    # far the most expensive thing a frame does, and a color never changes once
+    # built (every mutating method returns a new one)
+    __slots__ = ("_c", "_rgba8")
 
     def __init__(self, value: ColorLike = "#ffffff", alpha: float | None = None) -> None:
+        self._rgba8: tuple[int, int, int, int] | None = None
         if isinstance(value, Color):
             self._c = value._c.clone()
+            if alpha is None:
+                self._rgba8 = value._rgba8
         elif isinstance(value, (tuple, list)):
             self._c = Color.rgb(*value)._c
         else:
@@ -103,10 +109,21 @@ class Color:
         return tuple(float(v) for v in c[:-1])
 
     def to_rgba8(self) -> tuple[int, int, int, int]:
-        """Convert to gamut-mapped 8-bit RGBA, the form the renderer consumes."""
-        srgb = self._c.convert("srgb").fit()
-        r, g, b = (max(0.0, min(1.0, float(v))) for v in srgb[:-1])
-        return (round(r * 255), round(g * 255), round(b * 255), round(self.alpha * 255))
+        """Convert to gamut-mapped 8-bit RGBA, the form the renderer consumes.
+
+        Cached, since this runs once per object per frame and the conversion
+        dominates render time otherwise.
+        """
+        if self._rgba8 is None:
+            srgb = self._c.convert("srgb").fit()
+            r, g, b = (max(0.0, min(1.0, float(v))) for v in srgb[:-1])
+            self._rgba8 = (
+                round(r * 255),
+                round(g * 255),
+                round(b * 255),
+                round(self.alpha * 255),
+            )
+        return self._rgba8
 
     def to_argb32(self) -> int:
         """Pack into the 0xAARRGGBB integer Skia expects."""

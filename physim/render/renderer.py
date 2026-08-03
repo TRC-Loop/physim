@@ -287,9 +287,11 @@ class Renderer:
 
     def draw_glow(self, canvas, obj, center: Vec2, radius: float, strength: float) -> None:
         """Draw a blurred copy of a circle underneath it, for a neon look."""
-        paint = self._paint_for(obj, center, radius)
-        if paint is None:
+        source = self._paint_for(obj, center, radius)
+        if source is None:
             return
+        # flat-color paints are shared between objects, so blur a copy
+        paint = skia.Paint(source)
         paint.setImageFilter(blur_filter(radius * strength))
         cx, cy = self.res.to_raster(center)
         canvas.drawCircle(cx, cy, radius, paint)

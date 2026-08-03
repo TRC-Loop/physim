@@ -9,6 +9,12 @@ import skia
 from ..color import Gradient, Texture, resolve_paint
 from ..types import Resolution, Vec2
 
+#: reused paints for flat colors, keyed by appearance
+_flat_paints: dict[tuple, object] = {}
+
+#: ceiling so a scene using per-frame dynamic colors cannot grow the cache forever
+_PAINT_CACHE_LIMIT = 4096
+
 #: how a texture's fit mode maps onto Skia tiling
 _TILE_MODES = {
     "tile": skia.TileMode.kRepeat,
@@ -100,23 +106,45 @@ def make_paint(
     if resolved is None:
         return None
 
+    if isinstance(resolved, Gradient):
+        paint = _new_paint(antialias, stroke_width)
+        paint.setShader(gradient_shader(resolved, res, center, extent))
+        paint.setAlphaf(opacity)
+        return paint
+    if isinstance(resolved, Texture):
+        paint = _new_paint(antialias, stroke_width)
+        paint.setShader(texture_shader(resolved, res, center, extent))
+        paint.setAlphaf(opacity * resolved.opacity)
+        return paint
+
+    # flat colors are the common case by a wide margin, and thousands of
+    # objects usually share a handful of them, so reuse the paint object
+    rgba = resolved.to_rgba8()
+    key = (rgba, opacity, stroke_width, antialias)
+    cached = _flat_paints.get(key)
+    if cached is None:
+        r, g, b, a = rgba
+        cached = _new_paint(antialias, stroke_width)
+        cached.setColor(skia.Color(r, g, b, a))
+        cached.setAlphaf((a / 255.0) * opacity)
+        if len(_flat_paints) < _PAINT_CACHE_LIMIT:
+            _flat_paints[key] = cached
+    return cached
+
+
+def _new_paint(antialias: bool, stroke_width: float):
+    """Build a bare Skia paint with the right style."""
     paint = skia.Paint(AntiAlias=antialias)
     if stroke_width > 0.0:
         paint.setStyle(skia.Paint.kStroke_Style)
         paint.setStrokeWidth(stroke_width)
         paint.setStrokeCap(skia.Paint.kRound_Cap)
-
-    if isinstance(resolved, Gradient):
-        paint.setShader(gradient_shader(resolved, res, center, extent))
-        paint.setAlphaf(opacity)
-    elif isinstance(resolved, Texture):
-        paint.setShader(texture_shader(resolved, res, center, extent))
-        paint.setAlphaf(opacity * resolved.opacity)
-    else:
-        r, g, b, a = resolved.to_rgba8()
-        paint.setColor(skia.Color(r, g, b, a))
-        paint.setAlphaf((a / 255.0) * opacity)
     return paint
+
+
+def clear_paint_cache() -> None:
+    """Drop every cached flat-color paint."""
+    _flat_paints.clear()
 
 
 def blur_filter(radius: float):

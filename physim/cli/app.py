@@ -108,9 +108,7 @@ def render(
     if seconds is not None:
         instance.run(seconds)
 
-    console.print(
-        f"[cyan]{scene_class.__name__}[/] · {config.resolution} · {config.fps}fps · {fmt}"
-    )
+    _print_plan(scene_class.__name__, instance, config, hardware_encode, physics, seed)
     try:
         path = instance.render(quiet=quiet)
     except Exception as exc:  # noqa: BLE001  (surface any render failure cleanly)
@@ -191,6 +189,47 @@ def info() -> None:
     table.add_row("physics presets", ", ".join(physics_names()))
     table.add_row("resolutions", ", ".join(sorted(PRESETS)))
     console.print(table)
+
+
+def resolve_backend(requested: str) -> str:
+    """Work out which raster backend a render will actually use.
+
+    Only probes the GPU when it was asked for, since probing costs a subprocess.
+    """
+    if requested != "gpu":
+        return "cpu"
+    from ..render.gpu import gpu_available
+
+    return "gpu" if gpu_available() else "cpu (gpu unavailable)"
+
+
+def _print_plan(name, scene, config, hardware_encode, physics, seed) -> None:
+    """Summarize what is about to be rendered, before any work happens."""
+    backend = resolve_backend(config.backend)
+    frames = scene.total_frames
+    length = f"{frames / config.fps:.1f}s" if frames else "until stopped"
+
+    rows = [
+        ("scene", name),
+        ("output", str(config.output_path(name))),
+        ("resolution", f"{config.resolution} @ {config.fps}fps · {config.format}"),
+        ("length", f"{length}" + (f" ({frames} frames)" if frames else "")),
+        ("raster", backend),
+        ("encoder", f"{config.codec} ({'hardware' if hardware_encode else 'software'})"),
+        ("physics", physics or "default"),
+        ("objects", str(len(scene.objects))),
+        ("seed", "random" if seed is None and scene.seed is None else str(scene.seed)),
+    ]
+    if config.motion_blur > 1:
+        rows.append(("motion blur", f"{config.motion_blur} samples"))
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column(style="dim", justify="right")
+    table.add_column(style="cyan")
+    for label, value in rows:
+        table.add_row(label, value)
+    console.print(table)
+    console.print()
 
 
 def _installed(module: str) -> bool:

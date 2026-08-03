@@ -201,5 +201,57 @@ def test_rendered_video_actually_moves(tmp_path):
     assert changed >= len(frames) - 2
 
 
+def test_cached_paints_do_not_bleed_between_objects():
+    # flat-color paints are shared, so a per-object effect must not mutate one
+    from physim.effects import Glow
+
+    scene = build(
+        [
+            Circle(radius=25, fill="#ff0000", pos=(-40, 0)),
+            Circle(radius=25, fill="#0000ff", pos=(40, 0)),
+        ]
+    )
+    scene.objects[0].add_effect(Glow(strength=0.8))
+    frame = Renderer(scene.config).render(scene)
+
+    left, right = frame[80, 40], frame[80, 120]
+    assert left[0] > left[2], "left ball should stay red"
+    assert right[2] > right[0], "right ball should stay blue"
+
+
+def test_glow_does_not_blur_the_next_object():
+    from physim.effects import Glow
+
+    plain = build([Circle(radius=25, fill="#00ff00", pos=(40, 0))])
+    reference = Renderer(plain.config).render(plain).copy()
+
+    with_glow = build(
+        [
+            Circle(radius=25, fill="#ff0000", pos=(-40, 0)),
+            Circle(radius=25, fill="#00ff00", pos=(40, 0)),
+        ]
+    )
+    with_glow.objects[0].add_effect(Glow(strength=0.8))
+    frame = Renderer(with_glow.config).render(with_glow)
+    assert np.array_equal(frame[80, 120], reference[80, 120])
+
+
+def test_color_cache_survives_alpha_changes():
+    from physim.color import Color
+
+    base = Color("#ff0055")
+    assert base.to_rgba8() == (255, 0, 85, 255)
+    faded = base.with_alpha(0.5)
+    assert faded.to_rgba8()[3] == 128
+    assert base.to_rgba8()[3] == 255, "the original must keep its own alpha"
+
+
+def test_repeated_conversion_is_stable():
+    from physim.color import Color
+
+    c = Color.oklch(0.7, 0.2, 20)
+    assert c.to_rgba8() == c.to_rgba8()
+
+
 def test_default_output_path_uses_the_scene_name():
     assert RenderConfig().output_path("MyScene").name == "MyScene.mp4"

@@ -98,17 +98,30 @@ class HollowCircle(Boundary):
 
     def contact_with(self, body) -> Contact | None:
         """Return a contact when a body reaches the inner wall of the ring."""
-        offset = body.transform.position - self.pos
-        distance = offset.length
+        # this runs per body per substep, so the early-out stays scalar and
+        # nothing is allocated until a contact is actually found
+        position = body.transform.position
+        centre = self.pos
+        ox = position.x - centre.x
+        oy = position.y - centre.y
+        distance_sq = ox * ox + oy * oy
         limit = self.collision_radius - self.thickness / 2.0 - body.collision_radius
 
         if self.inward:
-            if distance <= limit:
+            if limit > 0.0 and distance_sq <= limit * limit:
                 return None
-            if self.angle_in_gap(offset.angle):
+            distance = math.sqrt(distance_sq)
+            if self.angle_in_gap(math.degrees(math.atan2(oy, ox))):
                 return None
-            normal = -offset.normalized() if distance > 0.0 else Vec2(0.0, -1.0)
-            return Contact(normal=normal, depth=distance - limit, point=self.pos + offset)
+            normal = Vec2(-ox / distance, -oy / distance) if distance > 0.0 else Vec2(0.0, -1.0)
+            return Contact(
+                normal=normal,
+                depth=distance - limit,
+                point=Vec2(centre.x + ox, centre.y + oy),
+            )
+
+        offset = Vec2(ox, oy)
+        distance = math.sqrt(distance_sq)
 
         outer = self.collision_radius + self.thickness / 2.0 + body.collision_radius
         if distance >= outer:
