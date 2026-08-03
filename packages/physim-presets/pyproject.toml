@@ -1,6 +1,6 @@
 [project]
 name = "physim-presets"
-version = "0.0.0"
+version = "0.1.0"
 description = "Color palettes and physics presets for physim"
 authors = [
     { name = "Arne K.", email = "me@arne.sh" }

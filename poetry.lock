@@ -589,7 +589,7 @@ markers = {main = "extra == \"audio\" or extra == \"all\""}
 
 [[package]]
 name = "physim-examples"
-version = "0.0.0"
+version = "0.1.0"
 description = "Runnable example scenes for physim"
 optional = true
 python-versions = ">=3.10,<4.0"
@@ -607,7 +607,7 @@ url = "packages/physim-examples"
 
 [[package]]
 name = "physim-presets"
-version = "0.0.0"
+version = "0.1.0"
 description = "Color palettes and physics presets for physim"
 optional = true
 python-versions = ">=3.10,<4.0"
