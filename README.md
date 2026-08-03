@@ -125,6 +125,12 @@ physim info                      # version, installed features, presets
 | `--no-audio` | skip audio entirely |
 | `-q, --quiet` | hide the progress bar |
 
+## For AI agents
+
+[ai-tutorial.md](ai-tutorial.md) is a complete reference written for coding
+agents: the API surface, the coordinate system, the common mistakes, and a
+worked example.
+
 ## Development
 
 ```bash
