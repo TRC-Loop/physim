@@ -1,6 +1,6 @@
 [project]
 name = "physim"
-version = "0.1.0"
+version = "0.0.0"
 description = "Python library to create mp4 animated visualizations (like those social media ball videos)"
 authors = [
     { name = "Arne K.", email = "me@arne.sh" }
