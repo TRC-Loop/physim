@@ -220,6 +220,47 @@ def test_ring_stack_builds_layers():
     assert stack.rings[-1].radius == 250
 
 
+def test_ring_stack_picks_the_ring_the_body_is_inside():
+    stack = RingStack(count=3, inner_radius=100, spacing=50, gap_degrees=30)
+    # sitting between the first and second ring
+    ball = Circle(radius=5, pos=(120, 0))
+    assert stack.active_ring(ball) is stack.rings[1]
+
+
+def test_ring_stack_ignores_rings_already_passed():
+    # a ring the body is outside of must not drag it back toward the centre
+    stack = RingStack(count=3, inner_radius=100, spacing=50, gap_degrees=30)
+    ball = Circle(radius=5, pos=(120, 0))
+    contact = stack.contact_with(ball)
+    assert contact is None or contact.depth < 10
+
+
+def test_ring_stack_does_not_teleport_a_passed_body():
+    scene = Scene(RenderConfig(fps=60), physics=PhysicsParams(gravity=0, damping=1.0))
+    stack = RingStack(count=3, inner_radius=100, spacing=50, gap_degrees=30)
+    scene.add(stack)
+    ball = Circle(radius=5, pos=(120, 0), velocity=(10, 0))
+    scene.add(ball)
+
+    before = ball.pos
+    scene.step(1 / 60)
+    assert (ball.pos - before).length < 20
+
+
+def test_ring_stack_escape_fires_for_inner_rings():
+    stack = RingStack(count=3, inner_radius=100, spacing=50, gap_degrees=30)
+    # beyond the innermost ring but nowhere near the outermost
+    ball = Circle(radius=5, pos=(140, 0))
+    assert stack.contains_escape(ball) is True
+
+
+def test_ring_stack_escape_only_fires_once_per_ring():
+    stack = RingStack(count=3, inner_radius=100, spacing=50, gap_degrees=30)
+    ball = Circle(radius=5, pos=(140, 0))
+    assert stack.contains_escape(ball) is True
+    assert stack.contains_escape(ball) is False
+
+
 def test_ring_stack_pop_removes_the_innermost():
     stack = RingStack(count=3)
     popped = stack.pop()

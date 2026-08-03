@@ -244,20 +244,26 @@ class RingStack(SceneObject):
         for ring in self.rings:
             ring.update(dt)
 
-    def contact_with(self, body) -> Contact | None:
-        """Return the first contact found among the rings."""
+    def active_ring(self, body) -> HollowCircle | None:
+        """The innermost live ring that still has ``body`` inside it.
+
+        Only that ring can block the body. Rings it has already passed are
+        behind it, and asking them would push it back toward the centre.
+        """
+        distance = (body.transform.position - self.pos).length
         for ring in self.rings:
-            if not ring.alive:
-                continue
-            contact = ring.contact_with(body)
-            if contact is not None:
-                return contact
+            if ring.alive and ring.collision_radius >= distance:
+                return ring
         return None
 
+    def contact_with(self, body) -> Contact | None:
+        """Return the contact with the ring the body is currently inside."""
+        ring = self.active_ring(body)
+        return ring.contact_with(body) if ring is not None else None
+
     def contains_escape(self, body) -> bool:
-        """Whether a body has escaped past the outermost live ring."""
-        live = [r for r in self.rings if r.alive]
-        return live[-1].contains_escape(body) if live else False
+        """Whether a body has just passed outside any ring it was inside."""
+        return any(ring.alive and ring.contains_escape(body) for ring in self.rings)
 
     def pop(self) -> HollowCircle | None:
         """Remove and return the innermost live ring, if any."""

@@ -6,8 +6,17 @@ Each runs for five seconds and shows off a different part of the library.
     python assets/demo.py          # renders all three and builds demo.gif
 """
 
-from physim import Circle, HollowCircle, RGBCycle, RingStack, Scene
-from physim.actions import Clone, Grow, PopRing, SpeedUp
+from physim import (
+    Circle,
+    Color,
+    HollowCircle,
+    PhysicsParams,
+    RGBCycle,
+    RingStack,
+    Scene,
+    Text,
+)
+from physim.actions import Clone, Custom, Grow, PopRing, SpeedUp
 from physim.effects import Glow, Trail
 from physim.events import Bounce, Escape
 
@@ -67,10 +76,84 @@ class Escaping(Scene):
         ball.on(Bounce, Clone(1, spread=120, max_objects=60, every=6))
         ball.on(Escape, PopRing(stack))
         self.add(ball)
+
+        counter = Text(
+            "1",
+            pos=(0, -radius * 1.1),
+            size=self.config.width * 0.09,
+            bold=True,
+            color="#ffffff",
+            opacity=0.55,
+            z=100,
+        )
+        self.add(counter)
+
+        @self.each_frame
+        def update_counter(scene, _dt) -> None:
+            """Keep the label in step with the ball count."""
+            counter.set_text(str(len(scene.bodies)))
+
         self.run(seconds=SECONDS)
 
 
-DEMOS = (Bouncing, Growing, Escaping)
+class Tiny(Scene):
+    """A tiny ball in a big ring, growing slowly, with a faint watermark.
+
+    Sizes are proportional to the frame so it looks the same at any resolution.
+    """
+
+    #: a ball in a round arena sheds vertical motion and starts rolling along
+    #: the wall, so every bounce is topped back up to at least this speed
+    MIN_SPEED = 620.0
+
+    def construct(self) -> None:
+        """Build the scene."""
+        # fully elastic, so bounces never decay into a roll
+        self.engine.params = PhysicsParams(gravity=850, restitution=1.0, damping=1.0)
+
+        radius = min(self.config.width, self.config.height) * 0.46
+        self.add(HollowCircle(radius=radius, stroke="#ffffff", thickness=5))
+
+        colour = Color("#ff006e")
+        ball = Circle(
+            radius=radius * 0.015,
+            velocity=(240, 90),
+            fill=colour,
+            stroke=colour.lighten(0.25),
+            stroke_width=2,
+        )
+        ball.add_effect(Trail(length=34, fade=0.5))
+        ball.on(Bounce, Grow(radius * 0.02, max_size=radius * 0.75))
+        ball.on(Bounce, Custom(self.keep_it_lively))
+        self.add(ball)
+
+        self.add(
+            Text(
+                "@trcloop",
+                pos=(0, -radius * 1.12),
+                size=self.config.width * 0.05,
+                font="Safiro",
+                color="#ffffff",
+                opacity=0.18,
+                z=100,
+            )
+        )
+        self.run(seconds=SECONDS)
+
+    @classmethod
+    def keep_it_lively(cls, event) -> None:
+        """Top a bounce back up to a minimum speed, and nudge it off the wall."""
+        ball = event.source
+        if ball.speed < cls.MIN_SPEED:
+            ball.speed = cls.MIN_SPEED
+        normal = event.get("normal")
+        if normal is not None and ball.velocity.dot(normal) < cls.MIN_SPEED * 0.35:
+            ball.velocity = (ball.velocity + normal * (cls.MIN_SPEED * 0.45)).clamped(
+                cls.MIN_SPEED * 1.3
+            )
+
+
+DEMOS = (Bouncing, Growing, Escaping, Tiny)
 
 
 def render_frames(size: int, fps: int) -> list:
@@ -90,7 +173,7 @@ def render_frames(size: int, fps: int) -> list:
     return frames
 
 
-def build_gif(path="assets/demo.gif", size=380, fps=16) -> str:
+def build_gif(path="assets/demo.gif", size=380, fps=20) -> str:
     """Render every demo and stitch the frames into one looping gif.
 
     Two passes over the frames: the first builds a palette across the whole
