@@ -6,7 +6,7 @@ Each runs for five seconds and shows off a different part of the library.
     python assets/demo.py          # renders all three and builds demo.gif
 """
 
-from physim import Circle, Color, HollowCircle, RGBCycle, RingStack, Scene
+from physim import Circle, HollowCircle, RGBCycle, RingStack, Scene
 from physim.actions import Clone, Grow, PopRing, SpeedUp
 from physim.effects import Glow, Trail
 from physim.events import Bounce, Escape
