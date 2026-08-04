@@ -184,6 +184,8 @@ cython_debug/
 out/
 *.mp4
 *.mkv
+# except the demo clips shipped with the readme
+!assets/*.mp4
 
 # macOS
 .DS_Store

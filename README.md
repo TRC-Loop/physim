@@ -11,6 +11,10 @@
 </p>
 
 <p align="center">
+  <video src="https://github.com/TRC-Loop/physim/raw/main/assets/cool2.mp4" controls muted width="320"></video>
+</p>
+
+<p align="center">
   <a href="https://pypi.org/project/physim/"><img alt="PyPI" src="https://img.shields.io/pypi/v/physim?color=ff006e&label=pypi"></a>
   <a href="https://pypi.org/project/physim/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/physim?color=3a86ff"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-39ff14"></a>

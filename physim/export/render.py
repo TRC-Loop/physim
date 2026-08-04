@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from ..config import RenderConfig
@@ -55,6 +55,18 @@ def _log(message: str, quiet: bool) -> None:
         print(message)
 
 
+def _annotate(bar, scene) -> None:
+    """Show the live object count alongside the progress bar."""
+    text = getattr(bar, "text", None)
+    if text is None:
+        return
+    message = f"{len(scene.objects)} objects"
+    if scene.stats.total_collisions:
+        message += f" · {scene.stats.total_collisions} hits"
+    with suppress(AttributeError, TypeError):
+        bar.text = message
+
+
 def render_scene(
     scene,
     *,
@@ -97,6 +109,7 @@ def render_scene(
 
                 scene.stats.end_frame()
                 bar()
+                _annotate(bar, scene)
     finally:
         with _step("flushing the encoder", quiet):
             writer.close()

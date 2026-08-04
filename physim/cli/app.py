@@ -52,6 +52,9 @@ def render(
     hardware_encode: bool = typer.Option(
         False, "--hardware-encode", help="Use a hardware video encoder when available."
     ),
+    bitrate: str | None = typer.Option(
+        None, "--bitrate", help="Video bitrate, e.g. 3M or 2500k. Default 12M."
+    ),
     motion_blur: int = typer.Option(0, "--motion-blur", help="Sub-frame samples per frame."),
     debug: bool = typer.Option(False, "--debug", "-d", help="Overlay fps/frametime/objects."),
     audio_only: bool = typer.Option(False, "--audio-only", help="Write only the audio track."),
@@ -86,6 +89,11 @@ def render(
     if resolution:
         try:
             config.resolution = Resolution.parse(resolution)
+        except ValueError as exc:
+            _fail(str(exc))
+    if bitrate:
+        try:
+            config.bitrate = parse_bitrate(bitrate)
         except ValueError as exc:
             _fail(str(exc))
 
@@ -189,6 +197,23 @@ def info() -> None:
     table.add_row("physics presets", ", ".join(physics_names()))
     table.add_row("resolutions", ", ".join(sorted(PRESETS)))
     console.print(table)
+
+
+def parse_bitrate(value: str) -> int:
+    """Parse a bitrate like ``3M``, ``2500k`` or a plain number of bits."""
+    text = value.strip().lower()
+    multiplier = 1
+    if text.endswith("m"):
+        multiplier, text = 1_000_000, text[:-1]
+    elif text.endswith("k"):
+        multiplier, text = 1_000, text[:-1]
+    try:
+        amount = float(text)
+    except ValueError:
+        raise ValueError(f"could not read bitrate {value!r}; try 3M, 2500k or 3000000") from None
+    if amount <= 0:
+        raise ValueError("bitrate must be positive")
+    return int(amount * multiplier)
 
 
 def resolve_backend(requested: str) -> str:

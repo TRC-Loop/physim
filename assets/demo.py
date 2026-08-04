@@ -11,13 +11,15 @@ from physim import (
     Color,
     HollowCircle,
     PhysicsParams,
+    Polygon,
     RGBCycle,
     RingStack,
     Scene,
     Text,
+    Vec2,
 )
 from physim.actions import Clone, Custom, Grow, PopRing, SpeedUp
-from physim.effects import Glow, Trail
+from physim.effects import Glow, Spin, Trail
 from physim.events import Bounce, Escape
 
 SECONDS = 5.0
@@ -153,7 +155,58 @@ class Tiny(Scene):
             )
 
 
-DEMOS = (Bouncing, Growing, Escaping, Tiny)
+class Bloom(Scene):
+    """Three bodies orbiting a central attractor, drawing spirograph trails.
+
+    No walls and no bouncing: gravity points inward instead of down, so each
+    body falls around the centre forever and its trail traces the orbit.
+    """
+
+    def construct(self) -> None:
+        """Build the scene."""
+        short = min(self.config.width, self.config.height)
+        self.engine.params = PhysicsParams(
+            gravity=0,
+            damping=1.0,
+            attraction=short**2 * 30,
+            substeps=8,
+        )
+
+        # a still mandala for the orbits to move against; fixed so the
+        # attractor does not pull the decoration into the middle
+        for i in range(6):
+            ring = Polygon(
+                radius=short * (0.14 + i * 0.055),
+                sides=3 + i,
+                fill=None,
+                stroke=Color.oklch(0.72, 0.17, i * 47),
+                stroke_width=2,
+                rotation=i * 11,
+                fixed=True,
+            )
+            ring.add_effect(Spin(speed=16 if i % 2 else -16))
+            self.add(ring)
+
+        # each body gets a different orbit radius, so the trails interleave
+        for i, (distance, speed, hue) in enumerate(
+            ((0.20, 1.06, 20), (0.29, 0.94, 150), (0.38, 0.88, 285))
+        ):
+            offset = short * distance
+            # circular orbit speed for this attractor, nudged off round
+            orbital = (self.engine.params.attraction / offset) ** 0.5 * speed
+            body = Circle(
+                radius=short * 0.018,
+                pos=Vec2.polar(i * 120, offset),
+                velocity=Vec2.polar(i * 120 + 90, orbital),
+                fill=Color.oklch(0.8, 0.2, hue),
+            )
+            body.add_effect(Trail(length=110, fade=0.85, every=1), Glow(strength=0.7))
+            self.add(body)
+
+        self.run(seconds=SECONDS)
+
+
+DEMOS = (Bouncing, Growing, Escaping, Tiny, Bloom)
 
 
 def render_frames(size: int, fps: int) -> list:
