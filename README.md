@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/TRC-Loop/physim/raw/main/assets/cool2.mp4" controls muted width="320"></video>
+  <a href="assets/cool2.mp4">▶ full render with sound</a>
 </p>
 
 <p align="center">
